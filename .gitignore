@@ -1,0 +1,9 @@
+bags/
+build/
+install/
+log/
+*.bag
+*.db3
+*.mcap
+.env
+.DS_Store

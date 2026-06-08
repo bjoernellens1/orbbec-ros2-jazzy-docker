@@ -1,0 +1,102 @@
+name: orbbec-ros2-jazzy
+
+x-orbbec-common: &orbbec-common
+  image: ${ORBBEC_IMAGE:-ghcr.io/bjoernellens1/orbbec-ros2-jazzy:latest}
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: runtime
+    args:
+      ROS_DISTRO: ${ROS_DISTRO:-jazzy}
+      BASE_IMAGE: ${BASE_IMAGE:-ros:jazzy-ros-base}
+      ORBBEC_REF: ${ORBBEC_REF:-v2-main}
+  network_mode: host
+  ipc: host
+  privileged: true
+  devices:
+    - /dev/bus/usb:/dev/bus/usb
+  volumes:
+    - /dev:/dev
+    - ./bags:/bags
+  environment:
+    ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+    RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+    FASTDDS_BUILTIN_TRANSPORTS: ${FASTDDS_BUILTIN_TRANSPORTS:-LARGE_DATA}
+    RCUTILS_COLORIZED_OUTPUT: "1"
+
+services:
+  femto-bolt:
+    <<: *orbbec-common
+    command: ["ros2", "launch", "orbbec_camera", "femto_bolt.launch.py"]
+
+  femto-bolt-compressed:
+    <<: *orbbec-common
+    command:
+      - ros2
+      - launch
+      - orbbec_camera
+      - femto_bolt.launch.py
+      - color_format:=MJPG
+      - enable_color:=true
+      - enable_depth:=true
+      - enable_ir:=false
+      - enable_point_cloud:=true
+
+  list-devices:
+    <<: *orbbec-common
+    profiles: ["tools"]
+    command: ["ros2", "run", "orbbec_camera", "list_devices_node"]
+
+  sdk-version:
+    <<: *orbbec-common
+    profiles: ["tools"]
+    command:
+      - bash
+      - -lc
+      - |
+        ros2 launch orbbec_camera femto_bolt.launch.py &
+        pid=$$!
+        trap 'kill $$pid 2>/dev/null || true' EXIT
+        sleep 5
+        ros2 service call /camera/get_sdk_version orbbec_camera_msgs/srv/GetString '{}'
+
+  topics:
+    <<: *orbbec-common
+    profiles: ["tools"]
+    command: ["bash", "-lc", "ros2 topic list -t"]
+
+  bag-record-rgbd:
+    <<: *orbbec-common
+    profiles: ["record"]
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /bags
+        exec ros2 bag record \
+          /camera/color/image_raw \
+          /camera/color/camera_info \
+          /camera/depth/image_raw \
+          /camera/depth/camera_info \
+          /camera/depth/points \
+          -o /bags/orbbec_femto_bolt_$$(date +%Y%m%d_%H%M%S)
+
+  shell:
+    <<: *orbbec-common
+    profiles: ["dev"]
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+
+  rviz:
+    <<: *orbbec-common
+    profiles: ["gui"]
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+      XAUTHORITY: /tmp/.docker.xauth
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTHORITY:-/tmp/.docker.xauth}:/tmp/.docker.xauth:ro
+    command: ["rviz2"]
