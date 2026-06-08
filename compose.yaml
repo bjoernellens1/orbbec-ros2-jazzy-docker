@@ -105,6 +105,7 @@ services:
   orbbecviewer:
     <<: *orbbec-common
     profiles: ["gui"]
+    working_dir: /opt/OrbbecViewer/current
     environment:
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
       DISPLAY: ${DISPLAY:-:0}
@@ -114,4 +115,4 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /dev/dri:/dev/dri
       - ${XAUTHORITY:-/tmp/.docker.xauth}:/tmp/.docker.xauth:ro
-    command: ["OrbbecViewer"]
+    command: ["./OrbbecViewer"]

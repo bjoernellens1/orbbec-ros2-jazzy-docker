@@ -124,6 +124,7 @@ RUN if [ -n "${ORBBEC_VIEWER_URL}" ]; then \
       && unzip -q /tmp/orbbecviewer.zip -d /opt/OrbbecViewer \
       && rm /tmp/orbbecviewer.zip \
       && ln -sf /opt/OrbbecViewer/OrbbecViewer_v${ORBBEC_VIEWER_VERSION}_*/OrbbecViewer /usr/local/bin/OrbbecViewer \
+      && ln -sfn /opt/OrbbecViewer/OrbbecViewer_v${ORBBEC_VIEWER_VERSION}_* /opt/OrbbecViewer/current \
       && OrbbecViewer --help 2>&1 | head -1 || true; \
     fi
 
