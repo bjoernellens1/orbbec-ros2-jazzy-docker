@@ -81,11 +81,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       libdw1 \
       libgflags2.2 \
-      libgoogle-glog0v6 \
       libgl1 \
+      libgl1-mesa-dri \
+      libglx-mesa0 \
+      libegl-mesa0 \
+      libegl1 \
+      libgles2 \
+      libglvnd0 \
+      libgbm1 \
+      libgoogle-glog0v6 \
       libssl3 \
       libusb-1.0-0 \
       mesa-utils \
+      mesa-utils-bin \
       nlohmann-json3-dev \
       ros-${ROS_DISTRO}-backward-ros \
       ros-${ROS_DISTRO}-camera-info-manager \
