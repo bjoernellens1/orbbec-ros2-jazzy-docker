@@ -4,6 +4,9 @@ ARG ROS_DISTRO=jazzy
 ARG BASE_IMAGE=ros:jazzy-ros-base
 ARG ORBBEC_REPO=https://github.com/orbbec/OrbbecSDK_ROS2.git
 ARG ORBBEC_REF=v2-main
+# OrbbecViewer (standalone GUI). Set to empty string to skip.
+ARG ORBBEC_VIEWER_URL=https://github.com/orbbec/OrbbecSDK/releases/download/v1.10.27/OrbbecViewer_v1.10.27_202509260133_linux_x64_release.zip
+ARG ORBBEC_VIEWER_VERSION=1.10.27
 
 FROM ${BASE_IMAGE} AS builder
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -101,6 +104,20 @@ COPY --from=builder /opt/orbbec_ws/install /opt/orbbec_ws/install
 COPY docker/entrypoint.sh /ros_entrypoint.sh
 COPY scripts/*.sh /usr/local/bin/
 RUN chmod +x /ros_entrypoint.sh /usr/local/bin/*.sh
+
+# Optional: install OrbbecViewer (standalone GUI). Skip if ORBBEC_VIEWER_URL is empty.
+ARG ORBBEC_VIEWER_URL
+ARG ORBBEC_VIEWER_VERSION
+RUN if [ -n "${ORBBEC_VIEWER_URL}" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends unzip \
+      && rm -rf /var/lib/apt/lists/* \
+      && curl -fsSL "${ORBBEC_VIEWER_URL}" -o /tmp/orbbecviewer.zip \
+      && mkdir -p /opt/OrbbecViewer \
+      && unzip -q /tmp/orbbecviewer.zip -d /opt/OrbbecViewer \
+      && rm /tmp/orbbecviewer.zip \
+      && ln -sf /opt/OrbbecViewer/OrbbecViewer_v${ORBBEC_VIEWER_VERSION}_*/OrbbecViewer /usr/local/bin/OrbbecViewer \
+      && OrbbecViewer --help 2>&1 | head -1 || true; \
+    fi
 
 WORKDIR /workspaces/orbbec
 ENTRYPOINT ["/ros_entrypoint.sh"]

@@ -12,6 +12,14 @@ on:
         description: 'OrbbecSDK_ROS2 ref to build'
         required: false
         default: 'v2-main'
+      orbbec_viewer_url:
+        description: 'OrbbecViewer .zip URL (empty string to skip)'
+        required: false
+        default: 'https://github.com/orbbec/OrbbecSDK/releases/download/v1.10.27/OrbbecViewer_v1.10.27_202509260133_linux_x64_release.zip'
+      orbbec_viewer_version:
+        description: 'OrbbecViewer version (must match the URL)'
+        required: false
+        default: '1.10.27'
 
 permissions:
   contents: read
@@ -26,6 +34,8 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/orbbec-ros2-jazzy
   ROS_DISTRO: jazzy
   ORBBEC_REF: ${{ github.event.inputs.orbbec_ref || 'v2-main' }}
+  ORBBEC_VIEWER_URL: ${{ github.event.inputs.orbbec_viewer_url || 'https://github.com/orbbec/OrbbecSDK/releases/download/v1.10.27/OrbbecViewer_v1.10.27_202509260133_linux_x64_release.zip' }}
+  ORBBEC_VIEWER_VERSION: ${{ github.event.inputs.orbbec_viewer_version || '1.10.27' }}
 
 jobs:
   build:
@@ -67,6 +77,8 @@ jobs:
           build-args: |
             ROS_DISTRO=${{ env.ROS_DISTRO }}
             ORBBEC_REF=${{ env.ORBBEC_REF }}
+            ORBBEC_VIEWER_URL=${{ env.ORBBEC_VIEWER_URL }}
+            ORBBEC_VIEWER_VERSION=${{ env.ORBBEC_VIEWER_VERSION }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

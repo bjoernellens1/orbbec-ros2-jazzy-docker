@@ -17,6 +17,7 @@ The image builds `orbbec/OrbbecSDK_ROS2` from source on top of the official ROS 
   - RGB-D bag recording
   - interactive shell
   - optional RViz GUI
+  - optional OrbbecViewer GUI (X11 passthrough)
 - GitHub Actions build pipeline publishing to GHCR
 - Host udev helper for USB permissions
 
@@ -122,6 +123,31 @@ docker compose --profile record run --rm bag-record-rgbd
 ```
 
 Bags are written to `./bags` on the host.
+
+### OrbbecViewer (standalone GUI)
+
+The image can optionally include the upstream OrbbecViewer binary (default: v1.10.27) so you can drive the camera with the vendor GUI instead of (or alongside) the ROS 2 wrapper. It needs X11 access on the host.
+
+```bash
+xhost +local:docker
+docker compose --profile gui run --rm orbbecviewer
+```
+
+OrbbecViewer opens its own device list and talks to the camera via libusb directly, so it does not need the ROS 2 driver running. It can also be launched in parallel with `femto-bolt` on the same `ROS_DOMAIN_ID` if you want to view the same stream via both tools.
+
+To skip the viewer at build time (smaller image, fewer download deps):
+
+```bash
+ORBBEC_VIEWER_URL= docker compose build
+```
+
+To pin a different OrbbecViewer release, both the URL and the version (which controls the unzip directory name) must match:
+
+```bash
+ORBBEC_VIEWER_URL=https://.../OrbbecViewer_v1.11.0_..._linux_x64_release.zip \
+ORBBEC_VIEWER_VERSION=1.11.0 \
+docker compose build
+```
 
 ### Development shell
 
