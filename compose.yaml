@@ -15,14 +15,23 @@ x-orbbec-common: &orbbec-common
   privileged: true
   devices:
     - /dev/bus/usb:/dev/bus/usb
+  # The whole-tree USB passthrough above covers all buses. ORBBEC_USB_DEVICE (see .env.example)
+  # is exposed inside the container as a hint for `make doctor` and the OrbbecSDK so users
+  # can document which physical port is in use; the bind-mount itself is intentionally global
+  # for portability.
   volumes:
     - /dev:/dev
     - ./bags:/bags
+    # Bind-mount the local scripts/ so changes (e.g. record-bag.sh, doctor.sh) take effect
+    # without rebuilding the image. Scripts are also COPYed into /usr/local/bin at build time
+    # for self-contained images, but the bind-mount takes precedence inside these services.
+    - ./scripts:/opt/orbbec-scripts:ro
   environment:
-    ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
-    RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
-    FASTDDS_BUILTIN_TRANSPORTS: ${FASTDDS_BUILTIN_TRANSPORTS:-LARGE_DATA}
-    RCUTILS_COLORIZED_OUTPUT: "1"
+    - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+    - FASTDDS_BUILTIN_TRANSPORTS=${FASTDDS_BUILTIN_TRANSPORTS:-LARGE_DATA}
+    - RCUTILS_COLORIZED_OUTPUT=1
+    - ORBBEC_USB_DEVICE=${ORBBEC_USB_DEVICE:-}
 
 services:
   femto-bolt:
@@ -41,6 +50,10 @@ services:
       - enable_depth:=true
       - enable_ir:=false
       - enable_point_cloud:=true
+
+  femto-mega:
+    <<: *orbbec-common
+    command: ["ros2", "launch", "orbbec_camera", "femto_mega.launch.py", "enable_imu:=false", "enable_gyro:=false", "enable_accel:=false"]
 
   list-devices:
     <<: *orbbec-common
@@ -65,21 +78,20 @@ services:
     profiles: ["tools"]
     command: ["bash", "-lc", "ros2 topic list -t"]
 
+  doctor:
+    <<: *orbbec-common
+    profiles: ["tools"]
+    command: ["bash", "-lc", "/opt/orbbec-scripts/doctor.sh"]
+
   bag-record-rgbd:
     <<: *orbbec-common
     profiles: ["record"]
-    command:
-      - bash
-      - -lc
-      - |
-        mkdir -p /bags
-        exec ros2 bag record \
-          /camera/color/image_raw \
-          /camera/color/camera_info \
-          /camera/depth/image_raw \
-          /camera/depth/camera_info \
-          /camera/depth/points \
-          -o /bags/orbbec_femto_bolt_$$(date +%Y%m%d_%H%M%S)
+    command: ["bash", "-lc", "BAG_PREFIX=femto_bolt BAG_LAUNCH=femto_bolt.launch.py BAG_LAUNCH_ARGS='enable_color:=true enable_depth:=true depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true publish_tf:=true enable_publish_extrinsic:=true enable_color_auto_exposure:=true enable_color_auto_white_balance:=true enable_noise_removal_filter:=true noise_removal_filter_min_diff:=256 noise_removal_filter_max_size:=80' /opt/orbbec-scripts/record-bag.sh"]
+
+  bag-record-rgbd-mega:
+    <<: *orbbec-common
+    profiles: ["record"]
+    command: ["bash", "-lc", "BAG_PREFIX=femto_mega BAG_LAUNCH=femto_mega.launch.py BAG_LAUNCH_ARGS='enable_imu:=false enable_gyro:=false enable_accel:=false enable_color:=true enable_depth:=true depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true publish_tf:=true enable_publish_extrinsic:=true enable_color_auto_exposure:=true enable_color_auto_white_balance:=true enable_noise_removal_filter:=true noise_removal_filter_min_diff:=256 noise_removal_filter_max_size:=80' /opt/orbbec-scripts/record-bag.sh"]
 
   shell:
     <<: *orbbec-common

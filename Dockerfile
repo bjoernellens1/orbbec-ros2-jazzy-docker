@@ -49,11 +49,15 @@ RUN mkdir -p ${ROS_WS}/src \
     && git clone --depth 1 --branch ${ORBBEC_REF} ${ORBBEC_REPO} ${ROS_WS}/src/OrbbecSDK_ROS2
 
 WORKDIR ${ROS_WS}
-RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
-    && colcon build \
+# The colcon build needs the ROS environment sourced, which only works under bash
+# (setup.bash uses bash-only syntax). Wrap the whole command in `bash -c` so it
+# runs under bash even when the OCI builder ignores the SHELL directive above
+# (buildah / podman buildx fall back to /bin/sh for RUN).
+RUN bash -c '. /opt/ros/${ROS_DISTRO}/setup.bash \
+  && colcon build \
        --merge-install \
        --event-handlers console_direct+ \
-       --cmake-args -DCMAKE_BUILD_TYPE=Release
+       --cmake-args -DCMAKE_BUILD_TYPE=Release'
 
 # Strip symbols where possible to keep runtime copy smaller.
 RUN find ${ROS_WS}/install -type f -executable -exec strip --strip-unneeded {} + 2>/dev/null || true
@@ -75,7 +79,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1
 
 # Runtime-only dependencies for ROS transport, camera info, diagnostics and USB/OpenGL libs
-# required by the upstream wrapper/SDK.
+# required by the upstream wrapper/SDK. usbutils (lsusb) and zenity are used by OrbbecViewer
+# for device-info lookups and native dialogs; without them the GUI spams "not found" warnings.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash-completion \
       ca-certificates \
@@ -103,9 +108,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-image-publisher \
       ros-${ROS_DISTRO}-image-transport \
       ros-${ROS_DISTRO}-image-transport-plugins \
+      ros-${ROS_DISTRO}-rosbag2-storage-mcap \
       ros-${ROS_DISTRO}-statistics-msgs \
       ros-${ROS_DISTRO}-xacro \
       udev \
+      usbutils \
+      zenity \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/orbbec_ws/install /opt/orbbec_ws/install
