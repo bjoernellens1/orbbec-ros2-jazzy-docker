@@ -43,10 +43,14 @@ BAG_TOPICS="${BAG_TOPICS:-/camera/color/image_raw /camera/color/camera_info /cam
 BAG_OPTIONAL_TOPICS="${BAG_OPTIONAL_TOPICS:-/tf /camera/depth_to_color/image_raw /camera/depth_to_color/camera_info /camera/depth_registered/points /camera/depth/points /camera/depth_to_color_extrinsics /camera/depth_to_ir /camera/depth_to_left_ir /camera/depth_to_right_ir /camera/depth_to_accel /camera/depth_to_gyro /camera/depth_to_ir_extrinsics /camera/depth_to_left_ir_extrinsics /camera/depth_to_right_ir_extrinsics /camera/depth_to_accel_extrinsics /camera/depth_to_gyro_extrinsics}"
 
 # Optional topics (recorded if they exist, otherwise a warning is printed).
-# IMU is disabled by default. To record IMU, set BAG_IMU_TOPICS explicitly
-# (e.g. /camera/imu) and add enable_imu:=true / enable_gyro:=true / enable_accel:=true
-# to BAG_LAUNCH_ARGS.
-BAG_IMU_TOPICS="${BAG_IMU_TOPICS:-}"
+# IMU is enabled by default. On Femto Mega firmware 1.3.1 / SDK 2.8.6 / wrapper
+# 2.8.7 the driver publishes a single combined sensor_msgs/Imu on
+# /camera/gyro_accel/sample, plus calibration blocks on
+# /camera/accel/imu_info and /camera/gyro/imu_info. Override BAG_IMU_TOPICS to
+# change the topic list, and ensure BAG_LAUNCH_ARGS includes
+# enable_imu:=true / enable_gyro:=true / enable_accel:=true so the upstream
+# driver brings up the sensors.
+BAG_IMU_TOPICS="${BAG_IMU_TOPICS:-/camera/gyro_accel/sample /camera/accel/imu_info /camera/gyro/imu_info}"
 
 publisher_log="$(mktemp -t orbbec-publisher.XXXXXX.log)"
 publisher_pid=""
