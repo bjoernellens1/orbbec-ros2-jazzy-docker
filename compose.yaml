@@ -86,12 +86,12 @@ services:
   bag-record-rgbd:
     <<: *orbbec-common
     profiles: ["record"]
-    command: ["bash", "-lc", "BAG_PREFIX=femto_bolt BAG_LAUNCH=femto_bolt.launch.py BAG_LAUNCH_ARGS='enable_color:=true enable_depth:=true depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true publish_tf:=true enable_publish_extrinsic:=true enable_color_auto_exposure:=true enable_color_auto_white_balance:=true enable_noise_removal_filter:=true noise_removal_filter_min_diff:=256 noise_removal_filter_max_size:=80' /opt/orbbec-scripts/record-bag.sh"]
+    command: ["bash", "-lc", "BAG_PREFIX=femto_bolt BAG_LAUNCH=femto_bolt.launch.py BAG_LAUNCH_ARGS='enable_imu:=true enable_gyro:=true enable_accel:=true enable_color:=true enable_depth:=true depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true publish_tf:=true enable_publish_extrinsic:=true enable_color_auto_exposure:=true enable_color_auto_white_balance:=true enable_noise_removal_filter:=true noise_removal_filter_min_diff:=256 noise_removal_filter_max_size:=80' BAG_IMU_TOPICS='/camera/gyro_accel/sample /camera/accel/imu_info /camera/gyro/imu_info' /opt/orbbec-scripts/record-bag.sh"]
 
   bag-record-rgbd-mega:
     <<: *orbbec-common
     profiles: ["record"]
-    command: ["bash", "-lc", "BAG_PREFIX=femto_mega BAG_LAUNCH=femto_mega.launch.py BAG_LAUNCH_ARGS='enable_imu:=false enable_gyro:=false enable_accel:=false enable_color:=true enable_depth:=true depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true publish_tf:=true enable_publish_extrinsic:=true enable_color_auto_exposure:=true enable_color_auto_white_balance:=true enable_noise_removal_filter:=true noise_removal_filter_min_diff:=256 noise_removal_filter_max_size:=80' /opt/orbbec-scripts/record-bag.sh"]
+    command: ["bash", "-lc", "BAG_PREFIX=femto_mega BAG_LAUNCH=femto_mega.launch.py BAG_LAUNCH_ARGS='enable_imu:=true enable_gyro:=true enable_accel:=true enable_color:=true enable_depth:=true depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true publish_tf:=true enable_publish_extrinsic:=true enable_color_auto_exposure:=true enable_color_auto_white_balance:=true enable_noise_removal_filter:=true noise_removal_filter_min_diff:=256 noise_removal_filter_max_size:=80' BAG_IMU_TOPICS='/camera/gyro_accel/sample /camera/accel/imu_info /camera/gyro/imu_info' /opt/orbbec-scripts/record-bag.sh"]
 
   shell:
     <<: *orbbec-common
