@@ -151,14 +151,14 @@ enable_color_auto_exposure:=true enable_color_auto_white_balance:=true
 enable_noise_removal_filter:=true noise_removal_filter_min_diff:=256 noise_removal_filter_max_size:=80
 ```
 
-Auto exposure and auto white balance are left on only during the startup/warmup window. Immediately before `ros2 bag record` starts, `record-bag.sh` locks both controls on `/camera/camera`:
+Auto exposure and auto white balance are left on only during the startup/warmup window. Immediately before `ros2 bag record` starts, `record-bag.sh` auto-detects the Orbbec parameter node and tries to lock both controls:
 
 ```bash
-ros2 param set /camera/camera enable_color_auto_exposure false
-ros2 param set /camera/camera enable_color_auto_white_balance false
+ros2 param set <camera-node> enable_color_auto_exposure false
+ros2 param set <camera-node> enable_color_auto_white_balance false
 ```
 
-This lets the camera settle to the room lighting, then prevents brightness and color temperature drift during the actual splatting recording. Set `BAG_LOCK_COLOR=false` to keep continuous auto exposure/WB. Depth noise-removal filtering is enabled, but decimation, spatial, temporal, and hole-filling filters stay off by default to avoid changing geometry more aggressively than necessary.
+This lets the camera settle to the room lighting, then prevents brightness and color temperature drift during the actual splatting recording. If the parameter node or parameter calls are unavailable, the script prints a warning and continues recording. Set `BAG_LOCK_COLOR=false` to keep continuous auto exposure/WB. Depth noise-removal filtering is enabled, but decimation, spatial, temporal, and hole-filling filters stay off by default to avoid changing geometry more aggressively than necessary.
 
 The required bag contents are:
 
@@ -237,10 +237,13 @@ Available env vars (all optional):
 | `BAG_IMU_TOPICS` | *(empty)* | optional topics, recorded if present, skipped if not. IMU is disabled by default; set explicitly to record it. |
 | `BAG_COMPRESSION` | `zstd_fast` | `zstd_fast` / `zstd_small` / `fastwrite` / `none` for MCAP storage presets; `file_zstd` and `message_zstd` for rosbag2 compression modes |
 | `BAG_LOCK_COLOR` | `true` | lock color auto exposure and auto white balance after warmup, before recording |
-| `BAG_CAMERA_NODE` | `/camera/camera` | node used for runtime color-control parameter updates |
+| `BAG_CAMERA_NODE` | `auto` | node used for runtime color-control parameter updates; set explicitly if auto-detection cannot find it |
+| `BAG_PARAM_TIMEOUT_SEC` | `5` | max seconds to wait for a camera parameter node before skipping the color lock |
+| `BAG_PARAM_SET_TIMEOUT_SEC` | `3` | max seconds for each ROS parameter command used during the color lock |
 | `BAG_OUT_DIR` | `/bags` | output directory inside the container (bound to `./bags` on the host) |
 | `BAG_WARMUP_SEC` | `2` | settle time after topics appear |
 | `BAG_TIMEOUT_SEC` | `20` | max wait for required topics |
+| `BAG_STOP_TIMEOUT_SEC` | `30` | max wait after Ctrl+C/SIGINT before escalating recorder shutdown |
 
 Inspect a recorded bag:
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Launch an Orbbec publisher in the background, wait for its /camera/* topics
-# to appear, then exec ros2 bag record in the foreground so the bag process
-# is the container PID 1 (so docker stop / Ctrl+C cleanly tears it down).
+# to appear, then run ros2 bag record in the foreground. The wrapper remains
+# alive so it can forward Ctrl+C to rosbag for finalization and then stop the
+# publisher.
 #
 # The bag is written in MCAP storage with MCAP chunk compression by default.
 #
@@ -13,10 +14,13 @@
 #   BAG_OPTIONAL_TOPICS - space-separated topics recorded if available
 #   BAG_IMU_TOPICS     - space-separated optional IMU topics; recorded if available, skipped if not
 #   BAG_LOCK_COLOR     - lock color auto exposure/WB after warmup (default: true)
-#   BAG_CAMERA_NODE    - Orbbec node for runtime params (default: /camera/camera)
+#   BAG_CAMERA_NODE    - Orbbec node for runtime params (default: auto)
+#   BAG_PARAM_TIMEOUT_SEC - max seconds to wait for the camera parameter node (default: 5)
+#   BAG_PARAM_SET_TIMEOUT_SEC - max seconds for each color-control param command (default: 3)
 #   BAG_OUT_DIR        - output directory inside the container (default: /bags)
 #   BAG_WARMUP_SEC     - extra seconds to wait after required topics appear (default: 2)
 #   BAG_TIMEOUT_SEC    - max seconds to wait for required topics (default: 20)
+#   BAG_STOP_TIMEOUT_SEC - max seconds to wait after SIGINT before escalating shutdown (default: 30)
 #   BAG_COMPRESSION    - compression profile: zstd_fast | zstd_small | fastwrite | none | file_zstd | message_zstd
 set -euo pipefail
 
@@ -28,7 +32,10 @@ BAG_WARMUP_SEC="${BAG_WARMUP_SEC:-2}"
 BAG_TIMEOUT_SEC="${BAG_TIMEOUT_SEC:-20}"
 BAG_COMPRESSION="${BAG_COMPRESSION:-zstd_fast}"
 BAG_LOCK_COLOR="${BAG_LOCK_COLOR:-true}"
-BAG_CAMERA_NODE="${BAG_CAMERA_NODE:-/camera/camera}"
+BAG_CAMERA_NODE="${BAG_CAMERA_NODE:-auto}"
+BAG_PARAM_TIMEOUT_SEC="${BAG_PARAM_TIMEOUT_SEC:-5}"
+BAG_PARAM_SET_TIMEOUT_SEC="${BAG_PARAM_SET_TIMEOUT_SEC:-3}"
+BAG_STOP_TIMEOUT_SEC="${BAG_STOP_TIMEOUT_SEC:-30}"
 
 # Default required topic set is intentionally training-oriented:
 # - color image + color camera_info provide RGB intrinsics
@@ -50,14 +57,134 @@ BAG_IMU_TOPICS="${BAG_IMU_TOPICS:-}"
 
 publisher_log="$(mktemp -t orbbec-publisher.XXXXXX.log)"
 publisher_pid=""
-cleanup() {
-  if [ -n "$publisher_pid" ] && kill -0 "$publisher_pid" 2>/dev/null; then
-    kill "$publisher_pid" 2>/dev/null || true
-    wait "$publisher_pid" 2>/dev/null || true
+recorder_pid=""
+stop_requested=0
+have_setsid=0
+if command -v setsid >/dev/null 2>&1; then
+  have_setsid=1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "[record] ERROR: python3 is required to launch ROS children with reset signal handlers." >&2
+  exit 1
+fi
+
+started_pid=""
+
+start_process_group() {
+  if [ "$have_setsid" = "1" ]; then
+    setsid python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); signal.signal(signal.SIGTERM, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' "$@" &
+  else
+    python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); signal.signal(signal.SIGTERM, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' "$@" &
   fi
+  started_pid=$!
+}
+
+signal_process() {
+  local pid="$1"
+  local sig="$2"
+
+  if [ -z "$pid" ]; then
+    return 0
+  fi
+
+  if [ "$have_setsid" = "1" ]; then
+    kill "-$sig" -- "-$pid" 2>/dev/null || true
+  else
+    kill "-$sig" "$pid" 2>/dev/null || true
+  fi
+}
+
+process_group_running() {
+  local pid="$1"
+  local rows
+
+  if [ -z "$pid" ]; then
+    return 1
+  fi
+
+  if [ "$have_setsid" != "1" ]; then
+    kill -0 "$pid" 2>/dev/null
+    return
+  fi
+
+  rows="$(ps -o pid=,stat= -g "$pid" 2>/dev/null | awk '$2 !~ /^Z/ { print $1 }')"
+  [ -n "$rows" ]
+}
+
+wait_for_exit() {
+  local pid="$1"
+  local seconds="$2"
+  local elapsed=0
+
+  while process_group_running "$pid"; do
+    if [ "$elapsed" -ge "$seconds" ]; then
+      return 1
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  wait "$pid" 2>/dev/null || true
+  return 0
+}
+
+stop_process() {
+  local pid="$1"
+  local name="$2"
+  local first_signal="$3"
+
+  if [ -z "$pid" ] || ! process_group_running "$pid"; then
+    wait "$pid" 2>/dev/null || true
+    return 0
+  fi
+
+  signal_process "$pid" "$first_signal"
+  if wait_for_exit "$pid" "$BAG_STOP_TIMEOUT_SEC"; then
+    return 0
+  fi
+
+  echo "[record] warning: $name did not stop after SIG$first_signal; sending SIGTERM" >&2
+  signal_process "$pid" TERM
+  if wait_for_exit "$pid" 5; then
+    return 0
+  fi
+
+  echo "[record] warning: $name did not stop after SIGTERM; sending SIGKILL" >&2
+  signal_process "$pid" KILL
+  if ! wait_for_exit "$pid" 3; then
+    echo "[record] warning: $name process group still visible after SIGKILL; continuing shutdown" >&2
+  fi
+}
+
+stop_publisher() {
+  stop_process "$publisher_pid" "publisher" TERM
+  publisher_pid=""
+}
+
+stop_recorder() {
+  stop_process "$recorder_pid" "recorder" INT
+  recorder_pid=""
+}
+
+cleanup() {
+  stop_recorder
+  stop_publisher
   rm -f "$publisher_log"
 }
-trap cleanup EXIT INT TERM
+
+handle_stop() {
+  trap '' INT TERM
+  stop_requested=1
+  echo
+  echo "[record] stop requested; finalizing recording and stopping publisher"
+  stop_recorder
+  stop_publisher
+  rm -f "$publisher_log"
+  exit 0
+}
+
+trap cleanup EXIT
+trap handle_stop INT TERM
 
 diagnose_publisher_failure() {
   if [ ! -s "$publisher_log" ]; then return; fi
@@ -87,6 +214,64 @@ diagnose_publisher_failure() {
   fi
 }
 
+with_timeout_seconds() {
+  local seconds="$1"
+  shift
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$seconds" "$@"
+  else
+    "$@"
+  fi
+}
+
+with_param_timeout() {
+  with_timeout_seconds "$BAG_PARAM_SET_TIMEOUT_SEC" "$@"
+}
+
+param_exists() {
+  local node="$1"
+  local param="$2"
+  with_param_timeout ros2 param get "$node" "$param" >/dev/null 2>&1
+}
+
+discover_camera_node() {
+  local node
+  local nodes
+  local candidates=()
+
+  if [ "$BAG_CAMERA_NODE" != "auto" ]; then
+    candidates+=("$BAG_CAMERA_NODE")
+  fi
+
+  # The Orbbec wrapper has used both names across launch/config variants.
+  candidates+=("/camera/camera" "/camera")
+
+  nodes="$(with_timeout_seconds "$BAG_PARAM_TIMEOUT_SEC" ros2 node list 2>/dev/null || true)"
+  while IFS= read -r node; do
+    case "$node" in
+      *camera*) candidates+=("$node") ;;
+    esac
+  done <<< "$nodes"
+
+  for node in "${candidates[@]}"; do
+    if printf '%s\n' "$nodes" | grep -qx "$node" && param_exists "$node" enable_color_auto_exposure; then
+      printf '%s\n' "$node"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+set_camera_param() {
+  local node="$1"
+  local param="$2"
+  local value="$3"
+
+  with_param_timeout ros2 param set "$node" "$param" "$value"
+}
+
 lock_color_controls() {
   case "$BAG_LOCK_COLOR" in
     true|1|yes|on) ;;
@@ -96,12 +281,24 @@ lock_color_controls() {
       ;;
   esac
 
-  echo "[record] locking color auto exposure and auto white balance on $BAG_CAMERA_NODE"
-  if ! ros2 param set "$BAG_CAMERA_NODE" enable_color_auto_exposure false; then
-    echo "[record] warning: failed to lock color auto exposure on $BAG_CAMERA_NODE" >&2
+  echo "[record] locking color auto exposure and auto white balance"
+  camera_node=""
+  camera_node="$(discover_camera_node || true)"
+
+  if [ -z "$camera_node" ]; then
+    echo "[record] warning: camera parameter node not found, skipping color lock" >&2
+    echo "[record] set BAG_CAMERA_NODE=/actual/node/name if your wrapper exposes color params on a different node" >&2
+    echo "[record] visible nodes:" >&2
+    with_timeout_seconds "$BAG_PARAM_TIMEOUT_SEC" ros2 node list 2>/dev/null | sed 's/^/[record]   /' >&2 || true
+    return
   fi
-  if ! ros2 param set "$BAG_CAMERA_NODE" enable_color_auto_white_balance false; then
-    echo "[record] warning: failed to lock color auto white balance on $BAG_CAMERA_NODE" >&2
+
+  echo "[record] using camera parameter node: $camera_node"
+  if ! set_camera_param "$camera_node" enable_color_auto_exposure false; then
+    echo "[record] warning: failed to lock color auto exposure on $camera_node" >&2
+  fi
+  if ! set_camera_param "$camera_node" enable_color_auto_white_balance false; then
+    echo "[record] warning: failed to lock color auto white balance on $camera_node" >&2
   fi
 }
 
@@ -113,8 +310,8 @@ bag="${BAG_OUT_DIR}/orbbec_${BAG_PREFIX}_${stamp}"
 launch_args=()
 for a in $BAG_LAUNCH_ARGS; do launch_args+=("$a"); done
 echo "[record] launching publisher: ros2 launch orbbec_camera $BAG_LAUNCH ${launch_args[*]:-}"
-ros2 launch orbbec_camera "$BAG_LAUNCH" "${launch_args[@]+"${launch_args[@]}"}" >"$publisher_log" 2>&1 &
-publisher_pid=$!
+start_process_group ros2 launch orbbec_camera "$BAG_LAUNCH" "${launch_args[@]+"${launch_args[@]}"}" >"$publisher_log" 2>&1
+publisher_pid=$started_pid
 
 # Wait up to BAG_TIMEOUT_SEC for all required topics to appear.
 echo "[record] waiting for required topics: $BAG_TOPICS"
@@ -198,4 +395,16 @@ esac
 
 echo "[record] topics: ${record_topics[*]}"
 echo "[record] starting ros2 bag record -> $bag (storage=mcap, compression/profile=$BAG_COMPRESSION)"
-exec ros2 bag record "${storage_args[@]}" --topics "${record_topics[@]}" -o "$bag"
+start_process_group ros2 bag record "${storage_args[@]}" --topics "${record_topics[@]}" -o "$bag"
+recorder_pid=$started_pid
+set +e
+wait "$recorder_pid"
+recorder_status=$?
+set -e
+recorder_pid=""
+
+if [ "$stop_requested" = "1" ]; then
+  exit 0
+fi
+
+exit "$recorder_status"
