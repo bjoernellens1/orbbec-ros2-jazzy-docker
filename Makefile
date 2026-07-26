@@ -1,7 +1,7 @@
 IMAGE ?= ghcr.io/bjoernellens1/orbbec-ros2-jazzy:latest
 COMPOSE ?= docker compose
 
-.PHONY: build pull run mega list topics shell record udev viewer doctor clean
+.PHONY: build pull run mega list topics shell record play play-rviz udev viewer doctor clean
 
 build:
 	ORBBEC_IMAGE=$(IMAGE) $(COMPOSE) build
@@ -29,6 +29,12 @@ record: ## Record training-ready aligned RGB-D topics from a Femto Bolt to ./bag
 
 record-mega: ## Record training-ready aligned RGB-D topics from a Femto Mega to ./bags
 	ORBBEC_IMAGE=$(IMAGE) $(COMPOSE) --profile record run --rm bag-record-rgbd-mega
+
+play: ## Play back the latest bag in ./bags (no GUI; ros2 bag play only)
+	ORBBEC_IMAGE=$(IMAGE) $(COMPOSE) --profile playback up bag-play
+
+play-rviz: ## Play back the latest bag in ./bags and visualize it in RViz
+	ORBBEC_IMAGE=$(IMAGE) $(COMPOSE) --profile playback up bag-play-rviz rviz-playback
 
 viewer:
 	ORBBEC_IMAGE=$(IMAGE) $(COMPOSE) --profile gui run --rm orbbecviewer

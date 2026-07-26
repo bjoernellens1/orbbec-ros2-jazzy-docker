@@ -74,7 +74,7 @@ LABEL org.opencontainers.image.title="orbbec-ros2-jazzy-docker" \
 ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=${ROS_DISTRO} \
     ROS_WS=/opt/orbbec_ws \
-    RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
+    RMW_IMPLEMENTATION=rmw_zenoh_cpp \
     RCUTILS_COLORIZED_OUTPUT=1 \
     PYTHONUNBUFFERED=1
 
@@ -109,6 +109,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-image-transport \
       ros-${ROS_DISTRO}-image-transport-plugins \
       ros-${ROS_DISTRO}-rosbag2-storage-mcap \
+      ros-${ROS_DISTRO}-rmw-zenoh-cpp \
+      ros-${ROS_DISTRO}-rviz2 \
       ros-${ROS_DISTRO}-statistics-msgs \
       ros-${ROS_DISTRO}-xacro \
       udev \

@@ -17,6 +17,7 @@ The image builds `orbbec/OrbbecSDK_ROS2` from source on top of the official ROS 
   - topic inspection
   - one-shot host/USB diagnostic (`make doctor`)
   - RGB-D bag recording (MCAP with ZSTD chunk compression, IMU disabled by default)
+  - rosbag playback in RViz (no camera required)
   - interactive shell
   - optional RViz GUI
   - optional OrbbecViewer GUI (X11 passthrough)
@@ -85,12 +86,14 @@ docker compose up femto-bolt
 Equivalent command inside the container:
 
 ```bash
-ros2 launch orbbec_camera femto_bolt.launch.py
+ros2 launch orbbec_camera femto_bolt.launch.py depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true
 ```
+
+**Hardware frame sync is on by default for every live-streaming service** (`femto-bolt`, `femto-bolt-compressed`, `femto-mega`) — depth and color are aligned/synchronized by the camera hardware itself at capture time, so consumers (SLAM frontends, etc.) get a single already-paired timestamp per frame and never need a downstream software re-sync step (`message_filters::ApproximateTime` or similar) to line up color/depth. This was previously only enabled on the `bag-record-*` profiles; it is now the default everywhere live frames are published, since any downstream consumer relying on independently-queued color/depth topics is exactly the failure mode a real consumer (splatograph's ORB-SLAM3 frontend) hit and root-caused via a *recorded bag* lacking this hardware pairing.
 
 ### Femto Mega publisher
 
-The image also ships the upstream `femto_mega.launch.py` for the Femto Mega (PID `0x0669`). The Mega needs a powered USB-3 port (≥5 V / 3 A) — see `docs/troubleshooting.md` if you see `Invalid power state` or `rtt is too large` warnings.
+The image also ships the upstream `femto_mega.launch.py` for the Femto Mega (PID `0x0669`). The Mega needs a powered USB-3 port (≥5 V / 3 A) — see `docs/troubleshooting.md` if you see `Invalid power state` or `rtt is too large` warnings. Also hardware-frame-synced by default (see above).
 
 ```bash
 make mega
@@ -102,10 +105,10 @@ make mega
 docker compose up femto-bolt-compressed
 ```
 
-This uses launch arguments that are often useful for bandwidth-conscious research logs:
+This uses launch arguments that are often useful for bandwidth-conscious research logs (also hardware-frame-synced by default, see above):
 
 ```bash
-color_format:=MJPG enable_color:=true enable_depth:=true enable_ir:=false enable_point_cloud:=true
+color_format:=MJPG enable_color:=true enable_depth:=true enable_ir:=false enable_point_cloud:=true depth_registration:=true align_target_stream:=COLOR enable_frame_sync:=true
 ```
 
 ### Device discovery
@@ -245,12 +248,72 @@ Available env vars (all optional):
 | `BAG_TIMEOUT_SEC` | `20` | max wait for required topics |
 | `BAG_STOP_TIMEOUT_SEC` | `30` | max wait after Ctrl+C/SIGINT before escalating recorder shutdown |
 
+Available env vars for `play-bag-in-rviz.sh` (all optional):
+
+| var | default | meaning |
+|---|---|---|
+| `BAG_PATH` | *(newest `*.mcap` under `BAG_OUT_DIR`)* | bag file or directory to play |
+| `BAG_RATE` | `1.0` | playback rate multiplier |
+| `BAG_LOOP` | `true` | loop the bag; set to `false` / `0` / `no` / `off` for a single playthrough |
+| `BAG_START_OFFSET` | `0` | seconds to skip at the start |
+| `BAG_TOPICS` | color, registered depth, camera infos, `/tf_static`, depth-to-color extrinsics | topic filter for `ros2 bag play` (space-separated) |
+| `BAG_OUT_DIR` | `/bags` | directory to scan when `BAG_PATH` is unset |
+| `BAG_RVIZ_CONFIG` | `/workspaces/orbbec/rviz/orbbec_playback.rviz` | path to a saved RViz config; printed to stdout if it exists, so the user can load it manually |
+
 Inspect a recorded bag:
 
 ```bash
 ros2 bag info ./bags/orbbec_femto_mega_*.mcap
 ros2 bag play ./bags/orbbec_femto_mega_*.mcap
 ```
+
+### Rosbag playback in RViz
+
+The `playback` profile is the inverse of the `record` profile: it replays a bag from `./bags` and re-publishes the topics on the same ROS graph, so an in-container RViz (or any other consumer on the same `ROS_DOMAIN_ID`) can visualize them. No camera is required.
+
+> **Note:** the `rviz-playback` service runs `rviz2` inside the container, which requires `ros-jazzy-rviz2`. The image used to ship only `ros-jazzy-ros-base` (no RViz); the runtime stage now installs `rviz2` as well. If you pull an image built before the playback profile was added, run `make build` once to pick up the new dependency.
+
+```bash
+make play-rviz
+```
+
+`make play-rviz` starts two services together:
+
+- `bag-play-rviz` — runs `scripts/play-bag-in-rviz.sh`, which picks the newest `*.mcap` under `./bags` and runs `ros2 bag play` in the foreground (PID 1, so `Ctrl+C` cleanly tears it down).
+- `rviz-playback` — opens `rviz2` with a preconfigured display layout (`rviz/orbbec_playback.rviz`) that already has a `Color` and `Depth` Image display plus a TF display. The `Fixed Frame` is `camera_color_optical_frame` (the standard Orbbec wrapper color frame), and `/tf_static` recorded by `make record` provides the rest of the tree.
+
+Like the other GUI services, `rviz-playback` needs X11 access on the host:
+
+```bash
+xhost +local:docker
+make play-rviz
+```
+
+Common variations (all env vars on `play-bag-in-rviz.sh`):
+
+```bash
+# Pick a specific bag explicitly.
+BAG_PATH=/bags/orbbec_femto_mega_20260610_125601/orbbec_femto_mega_20260610_125601_0.mcap \
+  make play-rviz
+
+# Slow it down (0.5x) — useful for hand-tuning RViz displays or
+# recording screencasts of the playback. Looping is already the default.
+BAG_RATE=0.5 make play-rviz
+
+# Single playthrough instead of looping. Use this for headless smoke tests
+# of a bag from CI, or to leave the play-rviz session tied to a recording
+# run.
+BAG_LOOP=false make play-rviz
+
+# Skip the first 5 seconds of the bag.
+BAG_START_OFFSET=5 make play-rviz
+
+# Headless: play the bag without RViz (useful for smoke-testing a bag
+# outside of an X11 session, e.g. inside CI).
+make play
+```
+
+The script filters playback to the training-oriented topic set (`/camera/color/image_raw`, `/camera/color/camera_info`, `/camera/depth/image_raw`, `/camera/depth/camera_info`, `/tf_static`, `/camera/depth_to_color`) by default. If you recorded a narrower or wider set, override it with `BAG_TOPICS` (space-separated). The script also prints the path to the recommended RViz config on startup so you can load it manually inside any other RViz.
 
 If recording starts but the camera cannot stream, `make doctor` will print host-side USB diagnostics. If the publisher dies before topics appear (typical symptom: `usbEnumerator openUsbDevice failed! status:113`), another process is likely holding the device or the link is unstable — see `docs/troubleshooting.md`.
 

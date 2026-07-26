@@ -28,15 +28,29 @@ x-orbbec-common: &orbbec-common
     - ./scripts:/opt/orbbec-scripts:ro
   environment:
     - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-    - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
-    - FASTDDS_BUILTIN_TRANSPORTS=${FASTDDS_BUILTIN_TRANSPORTS:-LARGE_DATA}
+    - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_zenoh_cpp}
     - RCUTILS_COLORIZED_OUTPUT=1
     - ORBBEC_USB_DEVICE=${ORBBEC_USB_DEVICE:-}
 
 services:
   femto-bolt:
     <<: *orbbec-common
-    command: ["ros2", "launch", "orbbec_camera", "femto_bolt.launch.py"]
+    # Hardware frame sync is the default for ALL live-streaming services, not
+    # just bag recording (see bag-record-rgbd below, which already proved
+    # these flags work) -- splatograph's live-camera SLAM pipeline depends on
+    # depth_registration/align_target_stream so color+depth arrive already
+    # hardware-paired at a single timestamp, never independently-queued
+    # topics needing a downstream software re-sync (root cause of a real
+    # ORB-SLAM3 crash traced to bag-replay's baked-in ~100ms color/depth
+    # offset -- see splatograph repo's CLAUDE.md "HARD CONSTRAINT" section).
+    command:
+      - ros2
+      - launch
+      - orbbec_camera
+      - femto_bolt.launch.py
+      - depth_registration:=true
+      - align_target_stream:=COLOR
+      - enable_frame_sync:=true
 
   femto-bolt-compressed:
     <<: *orbbec-common
@@ -50,10 +64,14 @@ services:
       - enable_depth:=true
       - enable_ir:=false
       - enable_point_cloud:=true
+      - depth_registration:=true
+      - align_target_stream:=COLOR
+      - enable_frame_sync:=true
 
   femto-mega:
     <<: *orbbec-common
-    command: ["ros2", "launch", "orbbec_camera", "femto_mega.launch.py", "enable_imu:=false", "enable_gyro:=false", "enable_accel:=false"]
+    # See femto-bolt above for why hardware frame sync is the default here too.
+    command: ["ros2", "launch", "orbbec_camera", "femto_mega.launch.py", "enable_imu:=false", "enable_gyro:=false", "enable_accel:=false", "depth_registration:=true", "align_target_stream:=COLOR", "enable_frame_sync:=true"]
 
   list-devices:
     <<: *orbbec-common
@@ -112,6 +130,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /dev/dri:/dev/dri
       - ${XAUTHORITY:-/tmp/.docker.xauth}:/tmp/.docker.xauth:ro
+      - ./rviz:/workspaces/orbbec/rviz:ro
     command: ["rviz2"]
 
   orbbecviewer:
@@ -128,3 +147,36 @@ services:
       - /dev/dri:/dev/dri
       - ${XAUTHORITY:-/tmp/.docker.xauth}:/tmp/.docker.xauth:ro
     command: ["./OrbbecViewer"]
+
+  # Rosbag playback services. The playback profile is the inverse of the
+  # `record` profile: it does not need a camera (no USB passthrough) and runs
+  # `ros2 bag play` against a bag on disk under /bags (bound to ./bags).
+  # `bag-play-rviz` + `rviz-playback` is the typical pair; `bag-play` is the
+  # headless variant for smoke tests. No X11 is required for `bag-play`.
+  bag-play-rviz:
+    <<: *orbbec-common
+    profiles: ["playback"]
+    # The publisher branch's devices:/dev passthrough is inherited from
+    # *orbbec-common. It is unused for playback (no camera is needed) but
+    # harmless if a camera is also plugged in.
+    command: ["bash", "-lc", "/opt/orbbec-scripts/play-bag-in-rviz.sh"]
+
+  bag-play:
+    <<: *orbbec-common
+    profiles: ["playback"]
+    command: ["bash", "-lc", "/opt/orbbec-scripts/play-bag-in-rviz.sh"]
+
+  rviz-playback:
+    <<: *orbbec-common
+    profiles: ["playback"]
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+      XAUTHORITY: /tmp/.docker.xauth
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/dri:/dev/dri
+      - ${XAUTHORITY:-/tmp/.docker.xauth}:/tmp/.docker.xauth:ro
+      - ./rviz:/workspaces/orbbec/rviz:ro
+    command: ["rviz2", "-d", "/workspaces/orbbec/rviz/orbbec_playback.rviz"]
