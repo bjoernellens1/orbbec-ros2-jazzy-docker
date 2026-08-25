@@ -2,8 +2,9 @@
 
 ARG ROS_DISTRO=jazzy
 ARG BASE_IMAGE=ros:jazzy-ros-base
-ARG ORBBEC_REPO=https://github.com/orbbec/OrbbecSDK_ROS2.git
-ARG ORBBEC_REF=v2-main
+ARG ORBBEC_REPO=https://github.com/bjoernellens1/OrbbecSDK_ROS2.git
+ARG ORBBEC_REF=a11e912a392a41686c135154587b1b3fa4b931c1
+ARG ORBBEC_UPSTREAM_REF=8e7cad2bfa2c4a6ac4e779be99c64e72166043af
 # OrbbecViewer (standalone GUI). Set to empty string to skip.
 ARG ORBBEC_VIEWER_URL=https://github.com/orbbec/OrbbecSDK/releases/download/v1.10.27/OrbbecViewer_v1.10.27_202509260133_linux_x64_release.zip
 ARG ORBBEC_VIEWER_VERSION=1.10.27
@@ -14,6 +15,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG ROS_DISTRO
 ARG ORBBEC_REPO
 ARG ORBBEC_REF
+ARG ORBBEC_UPSTREAM_REF
 ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=${ROS_DISTRO} \
     ROS_WS=/opt/orbbec_ws
@@ -45,8 +47,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-xacro \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p ${ROS_WS}/src \
-    && git clone --depth 1 --branch ${ORBBEC_REF} ${ORBBEC_REPO} ${ROS_WS}/src/OrbbecSDK_ROS2
+RUN echo "${ORBBEC_REF}" | grep -Eq '^[0-9a-f]{40}$' \
+    && echo "${ORBBEC_UPSTREAM_REF}" | grep -Eq '^[0-9a-f]{40}$' \
+    && mkdir -p ${ROS_WS}/src/OrbbecSDK_ROS2 \
+    && git -C ${ROS_WS}/src/OrbbecSDK_ROS2 init -q \
+    && git -C ${ROS_WS}/src/OrbbecSDK_ROS2 remote add origin ${ORBBEC_REPO} \
+    && git -C ${ROS_WS}/src/OrbbecSDK_ROS2 fetch --depth 1 origin ${ORBBEC_REF} \
+    && git -C ${ROS_WS}/src/OrbbecSDK_ROS2 checkout --detach FETCH_HEAD \
+    && test "$(git -C ${ROS_WS}/src/OrbbecSDK_ROS2 rev-parse HEAD)" = "${ORBBEC_REF}" \
+    && test "$(git -C ${ROS_WS}/src/OrbbecSDK_ROS2 cat-file -p HEAD | sed -n 's/^parent //p' | head -1)" = "${ORBBEC_UPSTREAM_REF}"
 
 WORKDIR ${ROS_WS}
 # The colcon build needs the ROS environment sourced, which only works under bash
@@ -66,10 +75,16 @@ FROM ${BASE_IMAGE} AS runtime
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG ROS_DISTRO
+ARG ORBBEC_REPO
+ARG ORBBEC_REF
+ARG ORBBEC_UPSTREAM_REF
 LABEL org.opencontainers.image.title="orbbec-ros2-jazzy-docker" \
       org.opencontainers.image.description="Minimal ROS 2 Jazzy container for OrbbecSDK_ROS2 v2 / Femto Bolt publishing" \
       org.opencontainers.image.source="https://github.com/bjoernellens1/orbbec-ros2-jazzy-docker" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.licenses="Apache-2.0" \
+      io.splatograph.orbbec.source="${ORBBEC_REPO}" \
+      io.splatograph.orbbec.revision="${ORBBEC_REF}" \
+      io.splatograph.orbbec.upstream-revision="${ORBBEC_UPSTREAM_REF}"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=${ROS_DISTRO} \

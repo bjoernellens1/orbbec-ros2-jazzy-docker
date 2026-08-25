@@ -2,7 +2,7 @@
 
 Containerized OrbbecSDK ROS 2 wrapper for research setups using ROS 2 Jazzy, especially as a clean publisher node for an **Orbbec Femto Bolt**.
 
-The image builds `orbbec/OrbbecSDK_ROS2` from source on top of the official ROS 2 Jazzy base image, then copies only the merged install tree into a smaller runtime stage.
+The image builds a pinned `OrbbecSDK_ROS2` source revision on top of the official ROS 2 Jazzy base image, then copies only the merged install tree into a smaller runtime stage.
 
 ## What this repo gives you
 
@@ -29,14 +29,23 @@ The image builds `orbbec/OrbbecSDK_ROS2` from source on top of the official ROS 
 This project builds from:
 
 ```text
-https://github.com/orbbec/OrbbecSDK_ROS2.git
-branch/ref: v2-main
+repository: https://github.com/bjoernellens1/OrbbecSDK_ROS2.git
+revision: a11e912a392a41686c135154587b1b3fa4b931c1
+upstream parent: 8e7cad2bfa2c4a6ac4e779be99c64e72166043af
 ```
 
-You can pin a release/tag or branch with:
+The build rejects moving branches/tags and verifies both the checked-out commit and its
+declared upstream parent. To build another revision, provide both full 40-character SHAs:
 
 ```bash
-ORBBEC_REF=v2.8.6 docker compose build
+ORBBEC_REF=<exact-commit-sha> ORBBEC_UPSTREAM_REF=<exact-parent-sha> docker compose build
+```
+
+Runtime OCI labels record the embedded source identity. Verify a built image with:
+
+```bash
+docker image inspect ghcr.io/bjoernellens1/orbbec-ros2-jazzy:latest \
+  --format '{{ index .Config.Labels "io.splatograph.orbbec.source" }} {{ index .Config.Labels "io.splatograph.orbbec.revision" }} {{ index .Config.Labels "io.splatograph.orbbec.upstream-revision" }}'
 ```
 
 ## Quick start
