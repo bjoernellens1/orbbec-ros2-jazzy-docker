@@ -30,7 +30,7 @@ This project builds from:
 
 ```text
 repository: https://github.com/bjoernellens1/OrbbecSDK_ROS2.git
-revision: a11e912a392a41686c135154587b1b3fa4b931c1
+revision: f57a001b48041e6cc13372b97e20fb7e71db7d93
 upstream parent: 8e7cad2bfa2c4a6ac4e779be99c64e72166043af
 ```
 
@@ -38,7 +38,7 @@ The build rejects moving branches/tags and verifies both the checked-out commit 
 declared upstream parent. To build another revision, provide both full 40-character SHAs:
 
 ```bash
-ORBBEC_REF=<exact-commit-sha> ORBBEC_UPSTREAM_REF=<exact-parent-sha> docker compose build
+ORBBEC_REF=<exact-commit-sha> ORBBEC_UPSTREAM_REF=<exact-upstream-ancestor-sha> docker compose build
 ```
 
 Runtime OCI labels record the embedded source identity. Verify a built image with:
