@@ -14,6 +14,8 @@ x-orbbec-common: &orbbec-common
       ORBBEC_UPSTREAM_REF: ${ORBBEC_UPSTREAM_REF:-8e7cad2bfa2c4a6ac4e779be99c64e72166043af}
       ORBBEC_SDK_REPO: ${ORBBEC_SDK_REPO:-https://github.com/bjoernellens1/OrbbecSDK_v2.git}
       ORBBEC_SDK_REF: ${ORBBEC_SDK_REF:-6e13176bb6e5e54a0405ab249ccf942ced0a3536}
+      ORBBEC_SDK_BUILD_JOBS: ${ORBBEC_SDK_BUILD_JOBS:-2}
+      ORBBEC_COLCON_BUILD_JOBS: ${ORBBEC_COLCON_BUILD_JOBS:-2}
   network_mode: host
   ipc: host
   privileged: true

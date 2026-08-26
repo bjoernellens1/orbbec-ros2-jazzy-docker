@@ -28,6 +28,14 @@ on:
         description: 'OrbbecViewer version (must match the URL)'
         required: false
         default: '1.10.27'
+      sdk_build_jobs:
+        description: 'Maximum SDK CMake build workers (1 or 2; hosted-runner safe)'
+        required: false
+        default: '2'
+      colcon_build_jobs:
+        description: 'Maximum colcon build workers (1 or 2; hosted-runner safe)'
+        required: false
+        default: '2'
 
 permissions:
   contents: read
@@ -46,6 +54,8 @@ env:
   ORBBEC_UPSTREAM_REF: ${{ github.event.inputs.orbbec_upstream_ref || '8e7cad2bfa2c4a6ac4e779be99c64e72166043af' }}
   ORBBEC_VIEWER_URL: ${{ github.event.inputs.orbbec_viewer_url || 'https://github.com/orbbec/OrbbecSDK/releases/download/v1.10.27/OrbbecViewer_v1.10.27_202509260133_linux_x64_release.zip' }}
   ORBBEC_VIEWER_VERSION: ${{ github.event.inputs.orbbec_viewer_version || '1.10.27' }}
+  ORBBEC_SDK_BUILD_JOBS: ${{ github.event.inputs.sdk_build_jobs || '2' }}
+  ORBBEC_COLCON_BUILD_JOBS: ${{ github.event.inputs.colcon_build_jobs || '2' }}
 
 jobs:
   build:
@@ -91,6 +101,8 @@ jobs:
             ORBBEC_UPSTREAM_REF=${{ env.ORBBEC_UPSTREAM_REF }}
             ORBBEC_VIEWER_URL=${{ env.ORBBEC_VIEWER_URL }}
             ORBBEC_VIEWER_VERSION=${{ env.ORBBEC_VIEWER_VERSION }}
+            ORBBEC_SDK_BUILD_JOBS=${{ env.ORBBEC_SDK_BUILD_JOBS }}
+            ORBBEC_COLCON_BUILD_JOBS=${{ env.ORBBEC_COLCON_BUILD_JOBS }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
