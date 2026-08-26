@@ -94,7 +94,10 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Export only layers used by the runtime image.  mode=max also
+          # uploads the multi-gigabyte SDK builder graph and previously left
+          # the hosted runner unresponsive during cache export.
+          cache-to: type=gha,mode=min
 
   smoke-test-compose:
     runs-on: ubuntu-24.04

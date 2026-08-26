@@ -20,3 +20,8 @@ grep -Fq "ARG ORBBEC_SDK_REF=$sdk_ref" "$root/Dockerfile"
 grep -Fq "ORBBEC_REF: \${ORBBEC_REF:-$wrapper_ref}" "$root/compose.yaml"
 grep -Fq "ORBBEC_SDK_REF: \${ORBBEC_SDK_REF:-$sdk_ref}" "$root/compose.yaml"
 ! grep -Eq '(^|[[:space:]-])[^#]*SDK[^#]*\.so[^#]*:' "$root/compose.yaml"
+
+# Keep pull-request builds from exporting every intermediate SDK/build layer to
+# the GitHub Actions cache.  The max-mode export can starve the hosted runner
+# while uploading the multi-gigabyte builder graph.
+grep -Fq 'cache-to: type=gha,mode=min' "$root/.github/workflows/docker-build.yml"
