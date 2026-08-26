@@ -7,6 +7,10 @@ ARG ORBBEC_REF=d269d2b48efafc7b667b5e965e351f74a4ef0cf0
 ARG ORBBEC_UPSTREAM_REF=8e7cad2bfa2c4a6ac4e779be99c64e72166043af
 ARG ORBBEC_SDK_REPO=https://github.com/bjoernellens1/OrbbecSDK_v2.git
 ARG ORBBEC_SDK_REF=6e13176bb6e5e54a0405ab249ccf942ced0a3536
+# Keep native builds within the hosted runner's 4 CPU / 16 GiB envelope. The
+# validation below intentionally caps overrides at two workers as well.
+ARG ORBBEC_SDK_BUILD_JOBS=2
+ARG ORBBEC_COLCON_BUILD_JOBS=2
 # OrbbecViewer (standalone GUI). Set to empty string to skip.
 ARG ORBBEC_VIEWER_URL=https://github.com/orbbec/OrbbecSDK/releases/download/v1.10.27/OrbbecViewer_v1.10.27_202509260133_linux_x64_release.zip
 ARG ORBBEC_VIEWER_VERSION=1.10.27
@@ -20,6 +24,8 @@ ARG ORBBEC_REF
 ARG ORBBEC_UPSTREAM_REF
 ARG ORBBEC_SDK_REPO
 ARG ORBBEC_SDK_REF
+ARG ORBBEC_SDK_BUILD_JOBS
+ARG ORBBEC_COLCON_BUILD_JOBS
 ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=${ROS_DISTRO} \
     ROS_WS=/opt/orbbec_ws
@@ -56,6 +62,15 @@ COPY scripts/check-orbbec-provenance.sh /usr/local/bin/check-orbbec-provenance
 RUN chmod +x /usr/local/bin/check-orbbec-provenance \
     && check-orbbec-provenance "${ORBBEC_REF}" "${ORBBEC_SDK_REF}"
 
+RUN case "${ORBBEC_SDK_BUILD_JOBS}" in \
+      1|2) ;; \
+      *) echo "ORBBEC_SDK_BUILD_JOBS must be 1 or 2 (got: ${ORBBEC_SDK_BUILD_JOBS})" >&2; exit 2 ;; \
+    esac \
+    && case "${ORBBEC_COLCON_BUILD_JOBS}" in \
+      1|2) ;; \
+      *) echo "ORBBEC_COLCON_BUILD_JOBS must be 1 or 2 (got: ${ORBBEC_COLCON_BUILD_JOBS})" >&2; exit 2 ;; \
+    esac
+
 RUN echo "${ORBBEC_SDK_REF}" | grep -Eq '^[0-9a-f]{40}$' \
     && mkdir -p /opt/orbbec_sdk/src \
     && git -C /opt/orbbec_sdk/src init -q \
@@ -71,7 +86,8 @@ RUN echo "${ORBBEC_SDK_REF}" | grep -Eq '^[0-9a-f]{40}$' \
          -DOB_BUILD_TOOLS=OFF \
          -DOB_BUILD_DOCS=OFF \
          -DOB_INSTALL_EXAMPLES_SOURCE=OFF \
-    && cmake --build /opt/orbbec_sdk/build --target install --parallel
+    && cmake --build /opt/orbbec_sdk/build --target install \
+         --parallel "${ORBBEC_SDK_BUILD_JOBS}"
 
 RUN echo "${ORBBEC_REF}" | grep -Eq '^[0-9a-f]{40}$' \
     && echo "${ORBBEC_UPSTREAM_REF}" | grep -Eq '^[0-9a-f]{40}$' \
@@ -100,6 +116,7 @@ WORKDIR ${ROS_WS}
 RUN bash -c '. /opt/ros/${ROS_DISTRO}/setup.bash \
   && colcon build \
        --merge-install \
+       --parallel-workers "${ORBBEC_COLCON_BUILD_JOBS}" \
        --event-handlers console_direct+ \
        --cmake-args -DCMAKE_BUILD_TYPE=Release'
 

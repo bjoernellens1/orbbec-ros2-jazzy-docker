@@ -51,6 +51,17 @@ rejected, while another explicitly supplied full SHA is accepted only after fetc
 verification. The runtime image records both source revisions in OCI labels and
 `/opt/orbbec_ws/ORBBEC_PROVENANCE`.
 
+Native SDK and ROS wrapper builds are bounded to two workers by default, which keeps the
+four-CPU, 16 GiB hosted runner within a predictable memory envelope. Both values are validated
+by the Dockerfile and may only be set to `1` or `2`:
+
+```bash
+ORBBEC_SDK_BUILD_JOBS=2 ORBBEC_COLCON_BUILD_JOBS=2 make build
+```
+
+The same defaults are passed by `docker compose build` and the GitHub Actions workflow; do not
+remove the explicit worker limits when changing build commands.
+
 The wrapper's declared upstream parent can still be changed with a full 40-character SHA:
 
 ```bash
