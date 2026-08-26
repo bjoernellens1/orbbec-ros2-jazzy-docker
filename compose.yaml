@@ -10,8 +10,10 @@ x-orbbec-common: &orbbec-common
       ROS_DISTRO: ${ROS_DISTRO:-jazzy}
       BASE_IMAGE: ${BASE_IMAGE:-ros:jazzy-ros-base}
       ORBBEC_REPO: ${ORBBEC_REPO:-https://github.com/bjoernellens1/OrbbecSDK_ROS2.git}
-      ORBBEC_REF: ${ORBBEC_REF:-f57a001b48041e6cc13372b97e20fb7e71db7d93}
+      ORBBEC_REF: ${ORBBEC_REF:-d269d2b48efafc7b667b5e965e351f74a4ef0cf0}
       ORBBEC_UPSTREAM_REF: ${ORBBEC_UPSTREAM_REF:-8e7cad2bfa2c4a6ac4e779be99c64e72166043af}
+      ORBBEC_SDK_REPO: ${ORBBEC_SDK_REPO:-https://github.com/bjoernellens1/OrbbecSDK_v2.git}
+      ORBBEC_SDK_REF: ${ORBBEC_SDK_REF:-6e13176bb6e5e54a0405ab249ccf942ced0a3536}
   network_mode: host
   ipc: host
   privileged: true

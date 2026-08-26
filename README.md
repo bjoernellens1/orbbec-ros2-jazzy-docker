@@ -2,7 +2,7 @@
 
 Containerized OrbbecSDK ROS 2 wrapper for research setups using ROS 2 Jazzy, especially as a clean publisher node for an **Orbbec Femto Bolt**.
 
-The image builds a pinned `OrbbecSDK_ROS2` source revision on top of the official ROS 2 Jazzy base image, then copies only the merged install tree into a smaller runtime stage.
+The image builds pinned `OrbbecSDK_ROS2` and `OrbbecSDK_v2` source revisions on top of the official ROS 2 Jazzy base image, then copies only the merged install tree into a smaller runtime stage. The SDK is built into the image; runtime services do not bind-mount an SDK shared library.
 
 ## What this repo gives you
 
@@ -29,16 +29,32 @@ The image builds a pinned `OrbbecSDK_ROS2` source revision on top of the officia
 This project builds from:
 
 ```text
-repository: https://github.com/bjoernellens1/OrbbecSDK_ROS2.git
-revision: f57a001b48041e6cc13372b97e20fb7e71db7d93
+wrapper repository: https://github.com/bjoernellens1/OrbbecSDK_ROS2.git
+wrapper revision: d269d2b48efafc7b667b5e965e351f74a4ef0cf0
+SDK repository: https://github.com/bjoernellens1/OrbbecSDK_v2.git
+SDK revision: 6e13176bb6e5e54a0405ab249ccf942ced0a3536
 upstream parent: 8e7cad2bfa2c4a6ac4e779be99c64e72166043af
 ```
 
-The build rejects moving branches/tags and verifies both the checked-out commit and its
-declared upstream parent. To build another revision, provide both full 40-character SHAs:
+The build rejects moving branches/tags and verifies both exact checked-out commits and the
+declared upstream parent. The lightweight provenance check is also runnable directly (it
+requires full SHAs and Docker then verifies each fetched `HEAD` exactly):
 
 ```bash
-ORBBEC_REF=<exact-commit-sha> ORBBEC_UPSTREAM_REF=<exact-upstream-ancestor-sha> docker compose build
+scripts/check-orbbec-provenance.sh \
+  d269d2b48efafc7b667b5e965e351f74a4ef0cf0 \
+  6e13176bb6e5e54a0405ab249ccf942ced0a3536
+```
+
+The checked-in defaults are tested with `scripts/test-provenance.sh`; moving branches/tags is
+rejected, while another explicitly supplied full SHA is accepted only after fetch/readback
+verification. The runtime image records both source revisions in OCI labels and
+`/opt/orbbec_ws/ORBBEC_PROVENANCE`.
+
+The wrapper's declared upstream parent can still be changed with a full 40-character SHA:
+
+```bash
+ORBBEC_UPSTREAM_REF=<exact-upstream-ancestor-sha> docker compose build
 ```
 
 Runtime OCI labels record the embedded source identity. Verify a built image with:
